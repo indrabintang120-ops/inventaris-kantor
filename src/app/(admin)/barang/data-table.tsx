@@ -2,19 +2,18 @@
 
 import {
   ColumnDef,
-  Row,
-  RowSelectionState,
-  SortingState,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
+  type ColumnFiltersState,
+  type SortingState,
+  type VisibilityState,
+  type Row,
 } from '@tanstack/react-table';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
 import {
   Table,
   TableBody,
@@ -23,65 +22,85 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { SerahTerimaMassalDialog } from './serah-terima-massal-dialog';
 import { type Barang } from './columns';
+
+interface AdminProfile {
+  id: string;
+  full_name: string | null;
+}
 
 interface DataTableProps<TData extends Barang, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  adminProfile: AdminProfile;
 }
 
 export function DataTable<TData extends Barang, TValue>({
   columns,
   data,
+  adminProfile,
 }: DataTableProps<TData, TValue>) {
+  const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState('');
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [rowSelection, setRowSelection] = useState({});
+
+  const [isMassHandoverDialogOpen, setIsMassHandoverDialogOpen] = useState(false);
 
   const table = useReactTable({
     data,
     columns,
+    // --- PERUBAHAN DI SINI ---
+    // Aturan ini akan memberitahu tabel bahwa sebuah baris
+    // hanya bisa dipilih jika statusnya 'Tersedia'.
+    enableRowSelection: (row) => row.original.status === 'Tersedia',
+    // --- AKHIR PERUBAHAN ---
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
-    onGlobalFilterChange: setGlobalFilter,
+    onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
+    onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
-    // Filter baris agar hanya yang statusnya "Tersedia" yang bisa dipilih
-    enableRowSelection: row => row.original.status === 'Tersedia',
     state: {
       sorting,
-      globalFilter,
+      columnFilters,
+      columnVisibility,
       rowSelection,
     },
   });
+  
+  const selectedRowsData = table.getSelectedRowModel().rows.map(row => row.original);
 
-  // Fungsi untuk membersihkan pilihan setelah submit berhasil
   const handleSuccess = () => {
+    router.refresh();
     table.resetRowSelection();
-    // Kita gunakan window.location.reload() untuk refresh data
-    window.location.reload();
   };
-
 
   return (
     <div>
       <div className="flex items-center justify-between py-4">
         <Input
-          placeholder="Cari di semua kolom..."
-          value={globalFilter ?? ''}
+          placeholder="Filter berdasarkan nama barang..."
+          value={(table.getColumn('nama')?.getFilterValue() as string) ?? ''}
           onChange={(event) =>
-            setGlobalFilter(event.target.value)
+            table.getColumn('nama')?.setFilterValue(event.target.value)
           }
           className="max-w-sm"
         />
-        {/* Tampilkan tombol Serah Terima Massal di sini */}
-        <SerahTerimaMassalDialog 
-            selectedRows={table.getFilteredSelectedRowModel().rows as Row<Barang>[]} 
-            onSuccess={handleSuccess}
-        />
+        <Button
+          onClick={() => setIsMassHandoverDialogOpen(true)}
+          disabled={selectedRowsData.length === 0}
+        >
+          Serah Terima Massal ({selectedRowsData.length})
+        </Button>
       </div>
       <div className="rounded-md border">
         <Table>
@@ -126,37 +145,43 @@ export function DataTable<TData extends Barang, TValue>({
                   colSpan={columns.length}
                   className="h-24 text-center"
                 >
-                  Tidak ada hasil.
+                  No results.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between space-x-2 py-4">
+      <div className="flex items-center justify-end space-x-2 py-4">
         <div className="flex-1 text-sm text-muted-foreground">
-          {table.getFilteredSelectedRowModel().rows.length} dari{' '}
-          {table.getFilteredRowModel().rows.length} baris (yang valid) terpilih.
+          {table.getFilteredSelectedRowModel().rows.length} of{' '}
+          {table.getFilteredRowModel().rows.length} row(s) selected.
         </div>
-        <div className="space-x-2">
-            <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-            >
-            Sebelumnya
-            </Button>
-            <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-            >
-            Berikutnya
-            </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => table.previousPage()}
+          disabled={!table.getCanPreviousPage()}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => table.nextPage()}
+          disabled={!table.getCanNextPage()}
+        >
+          Next
+        </Button>
       </div>
+
+      <SerahTerimaMassalDialog
+        isOpen={isMassHandoverDialogOpen}
+        onClose={() => setIsMassHandoverDialogOpen(false)}
+        selectedItems={selectedRowsData}
+        onSuccess={handleSuccess}
+        adminId={adminProfile.id}
+      />
     </div>
   );
 }

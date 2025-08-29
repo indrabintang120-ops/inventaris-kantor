@@ -1,10 +1,5 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
-import { Row } from '@tanstack/react-table';
-import { ArrowRightLeft } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -12,7 +7,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -21,135 +15,156 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { createClient } from '@/lib/supabase/client';
+import { useEffect, useState, useTransition } from 'react';
 import { type Barang } from './columns';
-import { useRouter } from 'next/navigation';
 
-type Pengguna = {
+// Definisikan tipe data untuk profil pengguna agar lebih aman
+type Profile = {
   id: string;
   full_name: string | null;
+  role: string;
+  jabatan: string | null;
 };
 
-export function SerahTerimaMassalDialog({
-  selectedRows,
-  onSuccess,
-}: {
-  selectedRows: Row<Barang>[];
+interface SerahTerimaMassalDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedItems: Barang[];
   onSuccess: () => void;
-}) {
-  const router = useRouter();
-  const [isOpen, setIsOpen] = useState(false);
-  const [penggunaList, setPenggunaList] = useState<Pengguna[]>([]);
+  adminId: string; 
+}
+
+export function SerahTerimaMassalDialog({
+  isOpen,
+  onClose,
+  selectedItems,
+  onSuccess,
+  adminId,
+}: SerahTerimaMassalDialogProps) {
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
+  const [catatan, setCatatan] = useState('');
   const [isPending, startTransition] = useTransition();
-  const formRef = useRef<HTMLFormElement>(null);
 
+  // Efek untuk mengambil data pengguna saat komponen pertama kali dimuat
   useEffect(() => {
-    if (isOpen) {
-      const supabase = createClient();
-      const fetchPengguna = async () => {
-        const { data } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .order('full_name');
-        setPenggunaList(data || []);
-      };
-      fetchPengguna();
+    async function fetchProfiles() {
+      try {
+        // Asumsi kita punya API endpoint untuk mengambil semua pengguna
+        const res = await fetch('/api/pengguna');
+        if (!res.ok) {
+          throw new Error('Gagal mengambil data pengguna');
+        }
+        const data: Profile[] = await res.json();
+        setProfiles(data);
+      } catch (error) {
+        console.error(error);
+        alert('Gagal memuat daftar pengguna.');
+      }
     }
-  }, [isOpen]);
+    fetchProfiles();
+  }, []);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!formRef.current) return;
-
-    const formData = new FormData(formRef.current);
-    const selectedIds = selectedRows.map((row) => row.original.id);
-    
-    const dataToSubmit = {
-        barangIds: selectedIds,
-        kePenggunaId: formData.get('kePenggunaId'),
-        catatan: formData.get('catatan')
-    };
+  const handleSubmit = async () => {
+    if (!selectedProfileId) {
+      alert('Silakan pilih penerima barang.');
+      return;
+    }
+    if (!adminId) {
+        alert('Error: ID Admin tidak ditemukan. Silakan coba muat ulang halaman.');
+        return;
+    }
 
     startTransition(async () => {
-      const response = await fetch('/api/serah-terima-massal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataToSubmit),
-      });
+      try {
+        const barangIds = selectedItems.map((item) => item.id);
 
-      if (response.ok) {
-        setIsOpen(false);
-        formRef.current?.reset();
-        onSuccess();
-        router.refresh(); // Refresh data di halaman
-      } else {
+        const response = await fetch('/api/serah-terima-massal', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            barangIds: barangIds,
+            kePenggunaId: selectedProfileId,
+            diserahkanOlehAdminId: adminId,
+            catatan: catatan,
+          }),
+        });
+
         const result = await response.json();
-        alert(`Gagal menyimpan: ${result.error}`);
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Terjadi kesalahan pada server.');
+        }
+
+        alert('Serah terima massal berhasil!');
+        onSuccess();
+        onClose();
+
+      } catch (error) {
+        console.error('Error submitting bulk handover:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Gagal memproses serah terima.';
+        alert(`Error: ${errorMessage}`);
       }
     });
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button disabled={selectedRows.length === 0}>
-            <ArrowRightLeft className="mr-2 h-4 w-4" />
-            Serah Terima ({selectedRows.length} Barang)
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Formulir Serah Terima Massal</DialogTitle>
           <DialogDescription>
-            Pilih pengguna yang akan menerima barang-barang ini.
+            Pilih penerima untuk {selectedItems.length} barang yang dipilih.
           </DialogDescription>
         </DialogHeader>
-        <div className="text-sm font-medium">Barang Terpilih:</div>
-        <ul className="list-disc list-inside text-sm text-muted-foreground max-h-24 overflow-y-auto">
-            {selectedRows.map(row => (
-                <li key={row.original.id}>{row.original.nama}</li>
-            ))}
-        </ul>
-        <form ref={formRef} onSubmit={handleSubmit} className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="kePenggunaId">Serahkan Kepada</Label>
-            <Select name="kePenggunaId" required>
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih pengguna..." />
+        <div className="grid gap-4 py-4">
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="penerima" className="text-right">
+              Penerima
+            </Label>
+            <Select
+              value={selectedProfileId}
+              onValueChange={setSelectedProfileId}
+            >
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Pilih Pengguna" />
               </SelectTrigger>
-              <SelectContent>
-                {penggunaList.map((pengguna) => (
-                  <SelectItem key={pengguna.id} value={pengguna.id}>
-                    {pengguna.full_name || 'Tanpa Nama'}
+              <SelectContent id="penerima">
+                {profiles.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    {profile.full_name || 'Tanpa Nama'} ({profile.jabatan || profile.role})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="catatan">Catatan (Opsional)</Label>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="catatan" className="text-right">
+              Catatan
+            </Label>
             <Textarea
               id="catatan"
-              name="catatan"
-              placeholder="Kondisi barang, kelengkapan, dll."
+              className="col-span-3"
+              placeholder="Catatan serah terima (opsional)"
+              value={catatan}
+              onChange={(e) => setCatatan(e.target.value)}
             />
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsOpen(false)}
-            >
-              Batal
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? 'Memproses...' : 'Simpan & Serahkan'}
-            </Button>
-          </DialogFooter>
-        </form>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>
+            Batal
+          </Button>
+          <Button onClick={handleSubmit} disabled={isPending}>
+            {isPending ? 'Memproses...' : 'Serahkan Barang'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-}
+} // <-- INI YANG HILANG SEBELUMNYA

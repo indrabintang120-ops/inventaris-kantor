@@ -1,53 +1,85 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-
-export const dynamic = 'force-dynamic';
+import { randomUUID } from 'crypto';
 
 export async function POST(request: Request) {
-  const supabase = createClient(); // Untuk mendapatkan info admin yang login
+  try {
+    const { 
+        barangIds, 
+        kePenggunaId, 
+        diserahkanOlehAdminId,
+        catatan 
+    }: { 
+        barangIds: string[]; 
+        kePenggunaId: string;
+        diserahkanOlehAdminId: string;
+        catatan?: string;
+    } = await request.json();
 
-  const { barangIds, kePenggunaId, catatan } = await request.json();
+    if (!barangIds || barangIds.length === 0 || !kePenggunaId || !diserahkanOlehAdminId) {
+      return NextResponse.json({ error: 'Data tidak lengkap: barangIds, kePenggunaId, dan diserahkanOlehAdminId wajib diisi.' }, { status: 400 });
+    }
 
-  if (!barangIds || barangIds.length === 0 || !kePenggunaId) {
-    return NextResponse.json(
-      { error: 'Barang dan pengguna wajib dipilih.' },
-      { status: 400 }
-    );
+    // --- PERUBAHAN DIMULAI DI SINI ---
+
+    // 1. Ambil data jabatan dari profil penerima
+    const { data: profilePenerima, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('jabatan')
+      .eq('id', kePenggunaId)
+      .single();
+
+    if (profileError || !profilePenerima) {
+      console.error('Error fetching recipient profile:', profileError);
+      throw new Error('Gagal menemukan profil penerima.');
+    }
+
+    // Gunakan jabatan sebagai lokasi baru. Jika jabatan kosong, bisa diberi nilai default.
+    const lokasiBaru = profilePenerima.jabatan || 'Di Pengguna';
+
+    // 2. Update data barang secara massal (termasuk lokasi)
+    const { error: updateBarangError } = await supabaseAdmin
+      .from('barang')
+      .update({
+        status: 'Digunakan',
+        pengguna_id: kePenggunaId,
+        lokasi: lokasiBaru, // <-- TAMBAHAN: Update kolom lokasi
+        updated_at: new Date().toISOString(),
+      })
+      .in('id', barangIds);
+    
+    // --- AKHIR PERUBAHAN ---
+
+    if (updateBarangError) {
+      console.error('Error updating barang:', updateBarangError);
+      throw new Error(`Gagal memperbarui data barang: ${updateBarangError.message}`);
+    }
+    
+    const transaksiId = randomUUID();
+    const riwayatRecords = barangIds.map((barangId) => ({
+      transaksi_id: transaksiId,
+      barang_id: barangId,
+      ke_pengguna_id: kePenggunaId,
+      diserahkan_oleh_admin_id: diserahkanOlehAdminId,
+      catatan: catatan || 'Serah terima massal.',
+      tipe: 'serah-terima',
+      tanggal_serah_terima: new Date().toISOString(),
+    }));
+
+    const { error: insertRiwayatError } = await supabaseAdmin
+      .from('riwayat_serah_terima')
+      .insert(riwayatRecords);
+
+    if (insertRiwayatError) {
+      console.error('Error inserting riwayat:', insertRiwayatError);
+      throw new Error(`Gagal mencatat riwayat serah terima: ${insertRiwayatError.message}`);
+    }
+
+    return NextResponse.json({ message: 'Serah terima massal berhasil diproses.', transaksi_id: transaksiId });
+
+  } catch (error) {
+    console.error('Server error during bulk handover:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan internal server.';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: 'Admin tidak terautentikasi.' }, { status: 401 });
-  }
-  const adminId = user.id;
-
-  // Siapkan data untuk riwayat
-  const riwayatInserts = barangIds.map((id: string) => ({
-    barang_id: id,
-    ke_pengguna_id: kePenggunaId,
-    diserahkan_oleh_admin_id: adminId,
-    catatan: catatan,
-    tipe: 'serah-terima',
-  }));
-
-  // Gunakan supabaseAdmin untuk operasi data
-  // 1. Update status barang satu per satu
-  const { error: updateError } = await supabaseAdmin
-    .from('barang')
-    .update({ pengguna_id: kePenggunaId, status: 'Digunakan' })
-    .in('id', barangIds);
-  
-  // 2. Insert semua riwayat sekaligus
-  const { error: insertError } = await supabaseAdmin.from('riwayat_serah_terima').insert(riwayatInserts);
-
-  if (updateError || insertError) {
-    console.error({ updateError, insertError });
-    return NextResponse.json(
-      { error: 'Gagal menyimpan data serah terima massal.' },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json({ message: 'Serah terima massal berhasil.' });
 }

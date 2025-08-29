@@ -17,37 +17,35 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+          // NOTE: Arahkan cookie untuk di-set pada 'response' yang akan dikirim, bukan pada 'request' yang masuk.
+          response.cookies.set({
+            name,
+            value,
+            ...options,
           })
         },
         remove(name: string, options) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
+          // NOTE: Sama seperti 'set', arahkan 'remove' ke 'response'.
+          response.cookies.set({
+            name,
+            value: '',
+            ...options,
           })
         },
       },
     }
   )
 
-  // Izinkan akses publik jika URL diawali dengan '/item/', '/api/', atau '/cetak/'
+  // Izinkan akses publik (tidak ada perubahan di sini)
   if (
     request.nextUrl.pathname.startsWith('/item/') ||
     request.nextUrl.pathname.startsWith('/api/') ||
-    request.nextUrl.pathname.startsWith('/cetak/') // <-- Perubahan ada di sini
+    request.nextUrl.pathname.startsWith('/cetak/')
   ) {
     return response
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
 
   if (!user && request.nextUrl.pathname !== '/login') {
     return NextResponse.redirect(new URL('/login', request.url))

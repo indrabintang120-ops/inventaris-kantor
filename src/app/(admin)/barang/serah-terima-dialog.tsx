@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,14 +19,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input'; // Menggunakan Input untuk Lokasi
-import { serahTerimaBarang } from './actions'; // Menggunakan API Route
+import { Textarea } from '@/components/ui/textarea';
+import { serahTerimaBarang } from './actions';
 import { useRouter } from 'next/navigation';
 
-// Definisikan tipe data untuk pengguna
-type Pengguna = {
+// Definisikan tipe data yang BENAR sesuai data dari API Anda
+type Profile = {
   id: string;
-  nama_lengkap: string;
+  full_name: string | null;
+  jabatan: string | null;
 };
 
 export function SerahTerimaDialog({
@@ -38,19 +39,16 @@ export function SerahTerimaDialog({
 }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [penggunaList, setPenggunaList] = useState<Pengguna[]>([]);
-  const [penerimaId, setPenerimaId] = useState<string>('');
-  const [lokasi, setLokasi] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [penggunaList, setPenggunaList] = useState<Profile[]>([]);
+  const [isPending, startTransition] = useTransition();
 
-  // Ambil daftar pengguna saat dialog akan dibuka
   useEffect(() => {
     if (isOpen) {
       const fetchPengguna = async () => {
         try {
-            const res = await fetch('/api/pengguna');
+            const res = await fetch('/api/pengguna'); 
             if (!res.ok) throw new Error('Gagal mengambil data pengguna');
-            const data = await res.json();
+            const data: Profile[] = await res.json();
             setPenggunaList(data);
         } catch (error) {
             console.error(error);
@@ -61,35 +59,19 @@ export function SerahTerimaDialog({
     }
   }, [isOpen]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const handleSubmit = (formData: FormData) => {
+    formData.append('barangId', barangId);
 
-    try {
-        const response = await fetch(`/api/serah-terima/${barangId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                penerimaId: penerimaId,
-                lokasi: lokasi,
-            }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Gagal melakukan serah terima');
-        }
-        
+    startTransition(async () => {
+      const result = await serahTerimaBarang(formData);
+      if (result.success) {
         alert('Serah terima barang berhasil.');
         setIsOpen(false);
         router.refresh();
-
-    } catch (error) {
-        console.error(error);
-        alert((error as Error).message);
-    } finally {
-        setIsSubmitting(false);
-    }
+      } else {
+        alert(result.message);
+      }
+    });
   };
 
   return (
@@ -102,31 +84,29 @@ export function SerahTerimaDialog({
             Pilih pengguna yang akan menerima barang ini.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-4 py-4">
+        <form action={handleSubmit} className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="kePenggunaId">Serahkan Kepada</Label>
-            <Select onValueChange={setPenerimaId} value={penerimaId} required>
+            <Select name="kePenggunaId" required>
               <SelectTrigger>
                 <SelectValue placeholder="Pilih pengguna..." />
               </SelectTrigger>
               <SelectContent>
                 {penggunaList.map((pengguna) => (
                   <SelectItem key={pengguna.id} value={pengguna.id}>
-                    {pengguna.nama_lengkap || 'Tanpa Nama'}
+                    {/* Perbaikan di sini: gunakan full_name */}
+                    {pengguna.full_name || 'Tanpa Nama'} ({pengguna.jabatan || 'Tanpa Jabatan'})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="lokasi">Lokasi Baru</Label>
-            <Input
-              id="lokasi"
-              name="lokasi"
-              value={lokasi}
-              onChange={(e) => setLokasi(e.target.value)}
-              placeholder="e.g. Meja Kerja Penerima"
-              required
+            <Label htmlFor="catatan">Catatan (Opsional)</Label>
+            <Textarea
+              id="catatan"
+              name="catatan"
+              placeholder="Catatan serah terima..."
             />
           </div>
           <DialogFooter>
@@ -137,8 +117,8 @@ export function SerahTerimaDialog({
             >
               Batal
             </Button>
-            <Button type="submit" disabled={isSubmitting || !penerimaId || !lokasi}>
-              {isSubmitting ? 'Menyimpan...' : 'Simpan & Serahkan'}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? 'Menyimpan...' : 'Simpan & Serahkan'}
             </Button>
           </DialogFooter>
         </form>
