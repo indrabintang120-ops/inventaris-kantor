@@ -5,7 +5,7 @@ import { ArrowUpDown } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { RowActions } from './row-actions';
-import { Checkbox } from '@/components/ui/checkbox'; // <-- Import Checkbox
+import { Checkbox } from '@/components/ui/checkbox';
 
 export type Barang = {
   id: string;
@@ -31,7 +31,6 @@ const createSortableHeader = (columnName: string) => {
 };
 
 export const columns: ColumnDef<Barang>[] = [
-  // Kolom baru untuk Checkbox
   {
     id: 'select',
     header: ({ table }) => (
@@ -49,7 +48,6 @@ export const columns: ColumnDef<Barang>[] = [
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        // Nonaktifkan checkbox untuk barang yang tidak tersedia
         disabled={row.original.status !== 'Tersedia'}
       />
     ),
@@ -69,6 +67,8 @@ export const columns: ColumnDef<Barang>[] = [
     accessorFn: (row) => row.kategori?.nama || '-',
     id: 'kategori',
     header: createSortableHeader('Kategori'),
+    // Tambahkan baris ini untuk "mengajari" filter
+    getFilterValue: (row) => row.original.kategori?.nama || '',
   },
   {
     accessorKey: 'status',
@@ -78,6 +78,8 @@ export const columns: ColumnDef<Barang>[] = [
     accessorFn: (row) => row.profiles?.full_name || 'Tidak ada',
     id: 'pengguna',
     header: createSortableHeader('Pengguna'),
+    // Tambahkan baris ini untuk "mengajari" filter
+    getFilterValue: (row) => row.original.profiles?.full_name || '',
   },
   {
     accessorKey: 'lokasi',

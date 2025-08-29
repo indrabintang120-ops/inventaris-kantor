@@ -33,11 +33,13 @@ import {
 } from '@/components/ui/dialog';
 import { deleteBarang } from './actions';
 import { SerahTerimaDialog } from './serah-terima-dialog';
-import { PengembalianDialog } from './pengembalian-dialog'; // <-- Pastikan baris ini ada
+import { PengembalianDialog } from './pengembalian-dialog';
 
 export function RowActions({ id, status, penggunaId }: { id: string, status: string, penggunaId: string | null }) {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isQrOpen, setIsQrOpen] = useState(false);
+  const [isSerahTerimaOpen, setIsSerahTerimaOpen] = useState(false);
+  const [isPengembalianOpen, setIsPengembalianOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const fullUrl = `${process.env.NEXT_PUBLIC_APP_URL}/item/${id}`;
@@ -61,38 +63,41 @@ export function RowActions({ id, status, penggunaId }: { id: string, status: str
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Aksi</DropdownMenuLabel>
           <DropdownMenuSeparator />
+          
           {status === 'Tersedia' && (
-            <SerahTerimaDialog barangId={id}>
-              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                <ArrowRightLeft className="mr-2 h-4 w-4" />
-                <span>Serah Terima</span>
-              </DropdownMenuItem>
-            </SerahTerimaDialog>
+            <DropdownMenuItem onSelect={() => setIsSerahTerimaOpen(true)}>
+              <ArrowRightLeft className="mr-2 h-4 w-4" />
+              <span>Serah Terima</span>
+            </DropdownMenuItem>
           )}
+
           {status === 'Digunakan' && penggunaId && (
-            <PengembalianDialog barangId={id} dariPenggunaId={penggunaId}>
-                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                    <Undo2 className="mr-2 h-4 w-4" />
-                    <span>Pengembalian</span>
-                </DropdownMenuItem>
-            </PengembalianDialog>
+            <DropdownMenuItem onSelect={() => setIsPengembalianOpen(true)}>
+              <Undo2 className="mr-2 h-4 w-4" />
+              <span>Pengembalian</span>
+            </DropdownMenuItem>
           )}
+
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setIsQrOpen(true)}>
             <QrCode className="mr-2 h-4 w-4" />
             <span>Lihat QR Code</span>
           </DropdownMenuItem>
-          <Link href={`/cetak/stiker/${id}`} target="_blank">
-            <DropdownMenuItem>
+          <Link href={`/cetak/stiker/${id}`} target="_blank" legacyBehavior passHref>
+            <DropdownMenuItem asChild>
+              <a>
                 <Sticker className="mr-2 h-4 w-4" />
                 <span>Cetak Stiker</span>
+              </a>
             </DropdownMenuItem>
           </Link>
           <DropdownMenuSeparator />
-          <Link href={`/barang/edit/${id}`}>
-            <DropdownMenuItem>
-              <Pen className="mr-2 h-4 w-4" />
-              <span>Edit</span>
+          <Link href={`/barang/edit/${id}`} legacyBehavior passHref>
+            <DropdownMenuItem asChild>
+              <a>
+                <Pen className="mr-2 h-4 w-4" />
+                <span>Edit</span>
+              </a>
             </DropdownMenuItem>
           </Link>
           <DropdownMenuItem
@@ -104,6 +109,23 @@ export function RowActions({ id, status, penggunaId }: { id: string, status: str
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Dialog untuk Serah Terima (dikontrol oleh state) */}
+      <SerahTerimaDialog 
+        barangId={id} 
+        open={isSerahTerimaOpen} 
+        onOpenChange={setIsSerahTerimaOpen} 
+      />
+      
+      {/* Dialog untuk Pengembalian (dikontrol oleh state) */}
+      {penggunaId && (
+        <PengembalianDialog 
+          barangId={id} 
+          dariPenggunaId={penggunaId}
+          open={isPengembalianOpen}
+          onOpenChange={setIsPengembalianOpen}
+        />
+      )}
 
       {/* Dialog untuk Hapus */}
       <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
@@ -132,7 +154,7 @@ export function RowActions({ id, status, penggunaId }: { id: string, status: str
             <DialogDescription>
               Scan QR code ini untuk melihat halaman detail publik.
             </DialogDescription>
-          </DialogHeader>
+          </DialogHeader> {/* <-- INI YANG SAYA PERBAIKI */}
           <div className="flex items-center justify-center p-4">
             <QRCodeSVG value={fullUrl} size={256} />
           </div>

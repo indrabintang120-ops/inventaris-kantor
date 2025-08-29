@@ -8,12 +8,10 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
-  type ColumnFiltersState,
   type SortingState,
   type VisibilityState,
   type Row,
 } from '@tanstack/react-table';
-
 import {
   Table,
   TableBody,
@@ -47,33 +45,28 @@ export function DataTable<TData extends Barang, TValue>({
 }: DataTableProps<TData, TValue>) {
   const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
-
+  const [globalFilter, setGlobalFilter] = useState('');
   const [isMassHandoverDialogOpen, setIsMassHandoverDialogOpen] = useState(false);
 
   const table = useReactTable({
     data,
     columns,
-    // --- PERUBAHAN DI SINI ---
-    // Aturan ini akan memberitahu tabel bahwa sebuah baris
-    // hanya bisa dipilih jika statusnya 'Tersedia'.
     enableRowSelection: (row) => row.original.status === 'Tersedia',
-    // --- AKHIR PERUBAHAN ---
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
-    onColumnFiltersChange: setColumnFilters,
-    getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    onGlobalFilterChange: setGlobalFilter,
+    getFilteredRowModel: getFilteredRowModel(),
     state: {
       sorting,
-      columnFilters,
       columnVisibility,
       rowSelection,
+      globalFilter,
     },
   });
   
@@ -88,11 +81,9 @@ export function DataTable<TData extends Barang, TValue>({
     <div>
       <div className="flex items-center justify-between py-4">
         <Input
-          placeholder="Filter berdasarkan nama barang..."
-          value={(table.getColumn('nama')?.getFilterValue() as string) ?? ''}
-          onChange={(event) =>
-            table.getColumn('nama')?.setFilterValue(event.target.value)
-          }
+          placeholder="Cari di semua kolom..."
+          value={globalFilter ?? ''}
+          onChange={(event) => setGlobalFilter(event.target.value)}
           className="max-w-sm"
         />
         <Button
@@ -107,18 +98,16 @@ export function DataTable<TData extends Barang, TValue>({
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  );
-                })}
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext()
+                        )}
+                  </TableHead>
+                ))}
               </TableRow>
             ))}
           </TableHeader>
@@ -174,7 +163,6 @@ export function DataTable<TData extends Barang, TValue>({
           Next
         </Button>
       </div>
-
       <SerahTerimaMassalDialog
         isOpen={isMassHandoverDialogOpen}
         onClose={() => setIsMassHandoverDialogOpen(false)}
